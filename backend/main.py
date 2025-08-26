@@ -186,12 +186,12 @@ def run_donor_intel_crew(
     )
 
     # Execute tasks sequentially
-    research_data = research_task.execute_sync(inputs={"donor_name": donor_name, "region": region, "theme": theme, "scrapped_data": research_notes, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name})
-    donor_profile = synthesize_task.execute_sync(inputs={"donor_name": donor_name, "region": region, "theme": theme, "research_data": research_data.model_dump_json(), "existing_profile": existing_profile, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name})
-    strategy = strategy_task.execute_sync(inputs={"donor_name": donor_name, "region": region, "theme": theme, "donor_profile": donor_profile.model_dump_json(), "recent_activity": recent_activity})
-    guidance = guidance_task.execute_sync(inputs={"donor_name": donor_name})
-    report_draft = report_task.execute_sync(inputs={"donor_profile": donor_profile.model_dump_json(), "strategy": strategy.model_dump_json(), "guidance": guidance.model_dump_json()})
-    final_report = governance_task.execute_sync(inputs={"report_draft": report_draft.model_dump_json(), "user_role": user_role})
+    research_data = research_task.execute_sync(context={"donor_name": donor_name, "region": region, "theme": theme, "scrapped_data": research_notes, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name})
+    donor_profile = synthesize_task.execute_sync(context={"donor_name": donor_name, "region": region, "theme": theme, "research_data": research_data.model_dump_json(), "existing_profile": existing_profile, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name})
+    strategy = strategy_task.execute_sync(context={"donor_name": donor_name, "region": region, "theme": theme, "donor_profile": donor_profile.model_dump_json(), "recent_activity": recent_activity})
+    guidance = guidance_task.execute_sync(context={"donor_name": donor_name})
+    report_draft = report_task.execute_sync(context={"donor_profile": donor_profile.model_dump_json(), "strategy": strategy.model_dump_json(), "guidance": guidance.model_dump_json()})
+    final_report = governance_task.execute_sync(context={"report_draft": report_draft.model_dump_json(), "user_role": user_role})
 
     result = {"final_report": final_report.report}
 
