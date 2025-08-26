@@ -1,0 +1,94 @@
+trigger:
+  branches:
+    include: [ main ]
+  paths:
+    include:
+      - infra/**
+      - frontend/**
+      - agents/**
+      - utils/**
+      - prompts/**
+      - main.py
+      - Dockerfile
+      - azure-pipelines.yml
+
+variables:
+# Service connection (ARM)
+- name: AZURE_SUBSCRIPTION_SC
+  value: datallmpoc-01
+
+# Infra naming / location
+- name: LOCATION
+  value: westeurope
+- name: RG
+  value: iom-d-we-datallmpoc-rg
+- name: PREFIX_HYPHEN
+  value: iom-d-we-donorint
+- name: SUFFIX
+  value: "01"
+
+# Image
+- name: IMAGE_NAME
+  value: donorstreamlit-app
+- name: IMAGE_TAG
+  value: $(Build.BuildId)
+
+# App config (NO angle brackets!)
+- name: AZURE_API_BASE
+  value: https://my-aoai-resource.openai.azure.com
+- name: AZURE_API_VERSION
+  value: 2024-05-01-preview
+- name: AZURE_OPENAI_DEPLOYMENT
+  value: gpt4o-prod
+
+# Secrets (Variable Group with AZURE_API_KEY marked secret)
+- group: donor-infra-secrets
+
+stages:
+- stage: Deploy
+  displayName: Build & Deploy Infra + App
+  jobs:
+  - job: DeployInfraAndApp
+    displayName: Deploy
+    pool: { vmImage: ubuntu-latest }
+    steps:
+    - checkout: self
+
+    # (Optional) quick diag of the connection
+    - task: AzureCLI@2
+      displayName: 'Diag: show cloud & subscriptions'
+      inputs:
+        azureSubscription: $(AZURE_SUBSCRIPTION_SC)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          set -e
+          az cloud show
+          echo "---- Accounts visible ----"
+          az account list -o table
+
+    # Run infra/deploy.sh with envs (no .env file)
+    - task: AzureCLI@2
+      displayName: 'Provision infra + deploy (deploy.sh)'
+      inputs:
+        azureSubscription: $(AZURE_SUBSCRIPTION_SC)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          set -euo pipefail
+          cd infra
+          chmod +x deploy.sh
+          ./deploy.sh
+      env:
+        LOCATION: $(LOCATION)
+        RG: $(RG)
+        PREFIX_HYPHEN: $(PREFIX_HYPHEN)
+        SUFFIX: $(SUFFIX)
+        IMAGE_NAME: $(IMAGE_NAME)
+        IMAGE_TAG: $(IMAGE_TAG)
+        AZURE_API_BASE: $(AZURE_API_BASE)
+        AZURE_API_VERSION: $(AZURE_API_VERSION)
+        AZURE_OPENAI_DEPLOYMENT: $(AZURE_OPENAI_DEPLOYMENT)
+        DUPLICATE_LANGCHAIN_VARS: "true"
+        # secret
+        AZURE_API_KEY: $(AZURE_API_KEY)

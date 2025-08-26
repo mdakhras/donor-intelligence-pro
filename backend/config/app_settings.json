@@ -1,0 +1,27 @@
+{
+  "default_donor": "Gates Foundation",
+  "default_region": "Sub-Saharan Africa",
+  "default_theme": "Health Systems",
+  "default_keywords": "primary healthcare, innovation",
+  "default_doc_type": "summary",
+  "default_audience": "PSU",
+  "default_include_tps": true,
+  "default_user_role": "HQ",
+
+  "use_mock_data": false,
+  "max_web_results": 5,
+  "cache_scraper_results": true,
+  "enable_debug_logging": true,
+
+  "document": {
+    "output_format": "docx",
+    "template": "default", 
+    "max_page_summary": 3,
+    "max_page_full": 10
+  },
+
+  "llm": {
+    "use_openai": true,
+    "fallback_to_mock_llm": false
+  }
+}

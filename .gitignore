@@ -1,0 +1,24 @@
+# --- Secrets ---
+# Ignore environment files
+/backend/.env
+/backend/local.settings.json
+
+# --- Python ---
+# Ignore virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- IDEs ---
+# Ignore JetBrains IDE files
+.idea/
+
+# Ignore VSCode files
+.vscode/

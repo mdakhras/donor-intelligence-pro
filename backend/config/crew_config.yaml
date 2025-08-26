@@ -1,0 +1,119 @@
+crew_name: Donor_Intelligence_Crew
+process: sequential
+description: >
+  A multi-agent CrewAI system for donor profiling, landscape analysis, and fundraising strategy generation.
+
+agents:
+  - name: DonorResearchAgent
+    role: Web & Document Scraper
+    goal: Extract donor insights from online sources and donor websites
+    backstory: >
+      An expert research analyst trained in navigating donor websites and official documents to collect real-time intelligence.
+    prompt_path: prompts/donor_research_prompt.txt
+
+  - name: ProfileSynthesizerAgent
+    role: Profile Compiler
+    goal: Merge structured research data and past donor info into a coherent donor profile
+    backstory: >
+      An expert research analyst trained in navigating donor websites and official documents to collect real-time intelligence.
+    prompt_path: prompts/profile_synthesizer_prompt.txt
+
+  - name: ReportWriterAgent
+    role: Donor Report Generator
+    goal: Create custom reports from profiles, tailored by user needs
+    backstory: >
+      An expert research analyst trained in navigating donor websites and official documents to collect real-time intelligence.
+    prompt_path: prompts/report_writer_prompt.txt
+
+  - name: GuidanceAgent
+    role: Engagement Instructions Advisor
+    goal: Suggest donor-specific outreach instructions and standard engagement practices
+    backstory: >
+      An expert research analyst trained in navigating donor websites and official documents to collect real-time intelligence.
+    prompt_path: prompts/guidance_prompt.txt
+
+  - name: StrategyRecommenderAgent
+    role: Fundraising Strategist
+    goal: Propose strategic engagement angles based on donor priorities
+    backstory: >
+      An expert research analyst trained in navigating donor websites and official documents to collect real-time intelligence.
+    prompt_path: prompts/strategy_recommender_prompt.txt
+
+  - name: GovernanceAgent
+    role: Role-Based Redactor
+    goal: Filter or redact content based on user’s access level
+    backstory: >
+      An expert research analyst trained in navigating donor websites and official documents to collect real-time intelligence.
+    prompt_path: prompts/governance_prompt.txt
+
+task_routing:
+  - task: ResearchDonorProfile
+    description: Collect online insights about the donor
+    assigned_to: DonorResearchAgent
+    inputs:
+      - donor_name
+      - region
+      - theme
+      - scrapped_data
+      - document_content
+      - research_mode
+      - canonical_donor_name
+       
+    expected_output: Structured research bullet points with source URLs
+    output_key: research_data
+
+  - task: SynthesizeDonorProfile
+    description: Build a profile from research and previous donor records
+    assigned_to: ProfileSynthesizerAgent
+    inputs:
+      - donor_name
+      - region
+      - theme
+      - research_data
+      - existing_profile
+      - document_content
+      - research_mode
+      - canonical_donor_name
+    expected_output: Structured donor profile with sections for key players, priorities, and funding history
+    output_key: donor_profile
+
+  - task: RecommendStrategy
+    description: Suggest engagement strategy based on donor profile
+    assigned_to: StrategyRecommenderAgent
+    inputs:
+      - donor_name
+      - region
+      - theme
+      - donor_profile
+      - recent_activity
+    expected_output: Strategic recommendation and justification aligned with donor interests
+    output_key: strategy
+
+  - task: AddEngagementTips
+    description: Provide standard outreach instructions based on donor type
+    assigned_to: GuidanceAgent
+    inputs:
+      - donor_name
+    expected_output: Engagement instructions, funding cycle info, and standard advisory notes
+    output_key: guidance
+
+  - task: GenerateReport
+    description: Produce a fundraising report tailored to audience
+    assigned_to: ReportWriterAgent
+    inputs:
+      - donor_profile
+      - strategy
+      - guidance
+    expected_output: Editable donor intelligence report text with optional talking points
+    output_key: report_draft
+
+  - task: ApplyGovernance
+    description: Redact sensitive information based on user role
+    assigned_to: GovernanceAgent
+    inputs:
+      - report_draft
+      - user_role
+    expected_output: Finalized donor report with sensitive content redacted as needed
+    output_key: final_report
+
+final_output: final_report
