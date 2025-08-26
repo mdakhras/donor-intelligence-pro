@@ -5,12 +5,13 @@ from dotenv import load_dotenv
 from typing import Dict, Any
 import logging
 # CrewAI / LangChain
-from crewai import Crew, Agent, Task, Process
+from crewai import Agent, Task
 from langchain_openai import AzureChatOpenAI
 from crewai import LLM
 import yaml
-from utils.helpers import load_prompt, render_prompt
+from utils.helpers import load_prompt
 from utils.web_scraper import search_donor_articles, RAW_INPUTS_DIR
+from models import ResearchData, DonorProfile, Strategy, Guidance, ReportDraft, FinalReport
 load_dotenv()
 
 
@@ -105,155 +106,104 @@ def run_donor_intel_crew(
     existing_profile, recent_activity, document_content: str = "",
     research_mode: str = "hybrid",
 ):
-    # from crewai import Crew, Agent, Task
-    # import yaml
-    # from utils.helpers import load_prompt
-    # from dotenv import load_dotenv
-    # # from langchain.chat_models import AzureChatOpenAI
-    # from langchain_openai import AzureChatOpenAI
-    # # from openai import AzureOpenAI
-    # import os
-    # load_dotenv()
-    
     research_mode = (research_mode or "hybrid").lower()
     if research_mode not in ("hybrid", "docs_only", "web_only"):
         research_mode = "hybrid"
 
-    # Load Crew configuration and app settings
     app_settings = load_app_settings()
     with open("config/crew_config.yaml", "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    # 1) Collect sources according to research mode
     scraped_results = []
     if research_mode in ("hybrid", "web_only"):
         max_results = int(app_settings.get("max_web_results", 5))
         save_flag = bool(app_settings.get("cache_scraper_results", True))
         scraped_results = search_donor_articles(
-            donor_name=donor_name,
-            region=region,
-            theme=theme,
-            max_results=max_results,
-            save_to_disk=save_flag,
+            donor_name=donor_name, region=region, theme=theme,
+            max_results=max_results, save_to_disk=save_flag,
         ) or []
 
-    # 2) Build research notes from collected sources
     notes_parts = []
     if research_mode in ("hybrid", "docs_only") and document_content:
         notes_parts.append("### DOCUMENT EXCERPTS\n" + document_content.strip())
-
     if research_mode in ("hybrid", "web_only") and scraped_results:
         joined = "\n\n---\n\n".join([f"{r.get('title','')}\n{r.get('body','')}\n{r.get('url','')}" for r in scraped_results])
         notes_parts.append("### WEB EXCERPTS\n" + joined)
-
     research_notes = "\n\n".join(notes_parts).strip()
 
-    # 3) If there's no content to process, exit early
     if not research_notes:
         logging.warning(f"Insufficient evidence for '{donor_name}'. No document content or web results found.")
         return {
             "final_report": f"Insufficient evidence for {donor_name}. No usable document content or web results were found.",
-            "_debug": {
-                "research_mode": research_mode,
-                "scraped_items_count": len(scraped_results),
-                "document_present": bool(document_content),
-            }
+            "_debug": {"research_mode": research_mode, "scraped_items_count": len(scraped_results), "document_present": bool(document_content)}
         }
 
-    # 4) Build the LLM once and share across agents
     llm = _build_llm()
-
-    # 5) Initialize agents from config and attach the LLM
     agents: Dict[str, Agent] = {}
     for agent_cfg in config["agents"]:
         prompt_template = load_prompt(agent_cfg["prompt_path"])
-        agent = Agent(
-            name=agent_cfg["name"],
-            role=agent_cfg["role"],
-            goal=agent_cfg["goal"],
-            backstory=agent_cfg.get("backstory", ""),
-            prompt_template=prompt_template,
-            llm=llm,
+        agents[agent_cfg["name"]] = Agent(
+            name=agent_cfg["name"], role=agent_cfg["role"], goal=agent_cfg["goal"],
+            backstory=agent_cfg.get("backstory", ""), prompt_template=prompt_template, llm=llm,
         )
-        agents[agent_cfg["name"]] = agent
 
-    
-    
-
-    # 5) Runtime inputs (also passed to tasks where needed)
-    runtime_inputs = {
-        "donor_name": donor_name,
-        "canonical_donor_name": canonical_donor_name,
-        "region": region,
-        "theme": theme,
-        "user_role": user_role,
-        "existing_profile": existing_profile,
-        "recent_activity": recent_activity,
-        # NEW: make both raw list and formatted text available
-        "scrapped_data": research_notes, #scraped,
-        # "research_snippets": research_notes,
-        "document_content": document_content,
-        "research_mode": research_mode,
-        
-    }
-
-
-    # print("Inside runtime fields:", runtime_inputs)
-    # 6) Build tasks according to routing
-    tasks = []
-    for task_cfg in config["task_routing"]:
-        # Collect declared inputs for this task: pull from previous outputs at runtime, or runtime_inputs
-        declared_inputs: Dict[str, Any] = {}
-        for key in task_cfg.get("inputs", []):
-            if key in runtime_inputs:
-                declared_inputs[key] = runtime_inputs[key]
-        task = Task(
-            description=task_cfg["description"],
-            agent=agents[task_cfg["assigned_to"]],
-            expected_output=task_cfg.get("expected_output", None),
-            inputs=declared_inputs,
-            output_key=task_cfg.get("output_key"),
-        )
-        # logging.info(f"Mo Task {task.description} -> output_key={task.output_key}, inputs={list(task.inputs.keys())}")
-        tasks.append(task)
-
-    # 7) Create Crew and kickoff (newer CrewAI versions)
-    crew = Crew(
-        name=config["crew_name"],
-        description=config["description"],
-        tasks=tasks,
-        process=Process.sequential,
-        verbose=False, #app_settings.get("enable_debug_logging", True),
+    # Define tasks with Pydantic output models
+    research_task = Task(
+        description="Collect online insights about the donor",
+        agent=agents['DonorResearchAgent'],
+        expected_output="A JSON object containing a list of research bullet points with source URLs.",
+        output_pydantic=ResearchData
+    )
+    synthesize_task = Task(
+        description="Build a profile from research and previous donor records",
+        agent=agents['ProfileSynthesizerAgent'],
+        expected_output="A JSON object representing a structured donor profile with sections for key players, priorities, and funding history.",
+        output_pydantic=DonorProfile
+    )
+    strategy_task = Task(
+        description="Suggest engagement strategy based on donor profile",
+        agent=agents['StrategyRecommenderAgent'],
+        expected_output="A JSON object containing a strategic recommendation and justification.",
+        output_pydantic=Strategy
+    )
+    guidance_task = Task(
+        description="Provide standard outreach instructions based on donor type",
+        agent=agents['GuidanceAgent'],
+        expected_output="A JSON object with engagement instructions, funding cycle info, and standard advisory notes.",
+        output_pydantic=Guidance
+    )
+    report_task = Task(
+        description="Produce a fundraising report tailored to audience",
+        agent=agents['ReportWriterAgent'],
+        expected_output="A JSON object containing the editable donor intelligence report text.",
+        output_pydantic=ReportDraft
+    )
+    governance_task = Task(
+        description="Redact sensitive information based on user role",
+        agent=agents['GovernanceAgent'],
+        expected_output="A JSON object containing the finalized, redacted donor report.",
+        output_pydantic=FinalReport
     )
 
-    result = crew.kickoff()
+    # Execute tasks sequentially
+    research_data = research_task.execute_sync(inputs={"donor_name": donor_name, "region": region, "theme": theme, "scrapped_data": research_notes, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name})
+    donor_profile = synthesize_task.execute_sync(inputs={"donor_name": donor_name, "region": region, "theme": theme, "research_data": research_data.model_dump_json(), "existing_profile": existing_profile, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name})
+    strategy = strategy_task.execute_sync(inputs={"donor_name": donor_name, "region": region, "theme": theme, "donor_profile": donor_profile.model_dump_json(), "recent_activity": recent_activity})
+    guidance = guidance_task.execute_sync(inputs={"donor_name": donor_name})
+    report_draft = report_task.execute_sync(inputs={"donor_profile": donor_profile.model_dump_json(), "strategy": strategy.model_dump_json(), "guidance": guidance.model_dump_json()})
+    final_report = governance_task.execute_sync(inputs={"report_draft": report_draft.model_dump_json(), "user_role": user_role})
 
-    # 8) Attach debug info for UI (optional)
+    result = {"final_report": final_report.report}
+
     if app_settings.get("enable_debug_logging", True):
-        # Grab newest raw_inputs file matching donor/region/theme
         latest_file = None
         try:
             candidates = sorted(Path(RAW_INPUTS_DIR).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
             latest_file = str(candidates[0]) if candidates else None
         except Exception:
             latest_file = None
-        # Return dict so Streamlit can inspect it
-        if isinstance(result, dict):
-            result.setdefault("_debug", {})
-            result["_debug"].update({
-                "raw_inputs_saved": save_flag,
-                "raw_inputs_latest_file": latest_file,
-                # "scraped_items_count": len(scraped),
-            })
-        else:
-            result = {
-                "final_report": str(result),
-                "_debug": {
-                    "raw_inputs_saved": save_flag,
-                    "raw_inputs_latest_file": latest_file,
-                    # "scraped_items_count": len(scraped),
-                },
-            }
+        result.setdefault("_debug", {})
+        result["_debug"].update({"raw_inputs_saved": save_flag, "raw_inputs_latest_file": latest_file})
 
     return result
 
