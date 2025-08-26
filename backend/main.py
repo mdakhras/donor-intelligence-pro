@@ -147,62 +147,66 @@ def run_donor_intel_crew(
             backstory=agent_cfg.get("backstory", ""), prompt_template=prompt_template, llm=llm,
         )
 
-    # Define tasks with Pydantic output models
+    # Define and execute tasks sequentially
+    research_inputs = {"donor_name": donor_name, "region": region, "theme": theme, "scrapped_data": research_notes, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name}
     research_task = Task(
         description="Collect online insights about the donor",
         agent=agents['DonorResearchAgent'],
         expected_output="A JSON object containing a list of research bullet points with source URLs.",
-        output_pydantic=ResearchData
+        output_pydantic=ResearchData,
+        inputs=research_inputs
     )
+    research_data = research_task.execute_sync()
+
+    synthesize_inputs = {"donor_name": donor_name, "region": region, "theme": theme, "research_data": research_data.model_dump(), "existing_profile": existing_profile, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name}
     synthesize_task = Task(
         description="Build a profile from research and previous donor records",
         agent=agents['ProfileSynthesizerAgent'],
         expected_output="A JSON object representing a structured donor profile with sections for key players, priorities, and funding history.",
-        output_pydantic=DonorProfile
+        output_pydantic=DonorProfile,
+        inputs=synthesize_inputs
     )
+    donor_profile = synthesize_task.execute_sync()
+
+    strategy_inputs = {"donor_name": donor_name, "region": region, "theme": theme, "donor_profile": donor_profile.model_dump(), "recent_activity": recent_activity}
     strategy_task = Task(
         description="Suggest engagement strategy based on donor profile",
         agent=agents['StrategyRecommenderAgent'],
         expected_output="A JSON object containing a strategic recommendation and justification.",
-        output_pydantic=Strategy
+        output_pydantic=Strategy,
+        inputs=strategy_inputs
     )
+    strategy = strategy_task.execute_sync()
+
+    guidance_inputs = {"donor_name": donor_name}
     guidance_task = Task(
         description="Provide standard outreach instructions based on donor type",
         agent=agents['GuidanceAgent'],
         expected_output="A JSON object with engagement instructions, funding cycle info, and standard advisory notes.",
-        output_pydantic=Guidance
+        output_pydantic=Guidance,
+        inputs=guidance_inputs
     )
+    guidance = guidance_task.execute_sync()
+
+    report_inputs = {"donor_profile": donor_profile.model_dump(), "strategy": strategy.model_dump(), "guidance": guidance.model_dump()}
     report_task = Task(
         description="Produce a fundraising report tailored to audience",
         agent=agents['ReportWriterAgent'],
         expected_output="A JSON object containing the editable donor intelligence report text.",
-        output_pydantic=ReportDraft
+        output_pydantic=ReportDraft,
+        inputs=report_inputs
     )
+    report_draft = report_task.execute_sync()
+
+    governance_inputs = {"report_draft": report_draft.model_dump(), "user_role": user_role}
     governance_task = Task(
         description="Redact sensitive information based on user role",
         agent=agents['GovernanceAgent'],
         expected_output="A JSON object containing the finalized, redacted donor report.",
-        output_pydantic=FinalReport
+        output_pydantic=FinalReport,
+        inputs=governance_inputs
     )
-
-    # Execute tasks sequentially
-    research_inputs = {"donor_name": donor_name, "region": region, "theme": theme, "scrapped_data": research_notes, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name}
-    research_data = research_task.execute_sync(context=json.dumps(research_inputs))
-
-    synthesize_inputs = {"donor_name": donor_name, "region": region, "theme": theme, "research_data": research_data.model_dump(), "existing_profile": existing_profile, "document_content": document_content, "research_mode": research_mode, "canonical_donor_name": canonical_donor_name}
-    donor_profile = synthesize_task.execute_sync(context=json.dumps(synthesize_inputs))
-
-    strategy_inputs = {"donor_name": donor_name, "region": region, "theme": theme, "donor_profile": donor_profile.model_dump(), "recent_activity": recent_activity}
-    strategy = strategy_task.execute_sync(context=json.dumps(strategy_inputs))
-
-    guidance_inputs = {"donor_name": donor_name}
-    guidance = guidance_task.execute_sync(context=json.dumps(guidance_inputs))
-
-    report_inputs = {"donor_profile": donor_profile.model_dump(), "strategy": strategy.model_dump(), "guidance": guidance.model_dump()}
-    report_draft = report_task.execute_sync(context=json.dumps(report_inputs))
-
-    governance_inputs = {"report_draft": report_draft.model_dump(), "user_role": user_role}
-    final_report = governance_task.execute_sync(context=json.dumps(governance_inputs))
+    final_report = governance_task.execute_sync()
 
     result = {"final_report": final_report.report}
 
