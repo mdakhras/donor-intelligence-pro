@@ -121,7 +121,7 @@ st.subheader("Submit a new donor intelligence request")
 
 # --- Form ---
 with st.form("input_form", clear_on_submit=True):
-    donor_name = st.text_input("Donor Name", key="donor_name", placeholder="e.g., Aamazon Foundation")
+    donor_name = st.text_input("Donor Name", key="donor_name", placeholder="e.g., Bill & Melinda Gates Foundation")
     thematic_area = st.text_input("Thematic Area", key="thematic_area", placeholder="e.g., Global Health")
     country = st.text_input("Country / Region", key="country", placeholder="e.g., Sub-Saharan Africa")
     desc = st.text_area("Description", key="desc", placeholder="Provide a brief description of the request...")

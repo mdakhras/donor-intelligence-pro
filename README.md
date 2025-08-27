@@ -11,7 +11,7 @@ This application is built on a decoupled, asynchronous architecture designed for
 -   **Frontend**: A [Streamlit](https://streamlit.io/) application serves as the user interface. Users can submit requests with donor details and upload supporting PDF documents.
 -   **File Storage**: Uploaded PDF documents are stored in **Azure Blob Storage**.
 -   **Request Queue**: Request details, including user inputs and links to the documents in Blob Storage, are stored as items in an **Azure Cosmos DB** container. This acts as a persistent queue for the backend.
--   **Backend**: An **Azure Function**, triggered on a timer, polls the Cosmos DB for new requests. When a "pending" request is found, the function downloads the relevant documents, runs the multi-agent analysis pipeline, and updates the request item in Cosmos DB with the results.
+-   **Backend**: An **Azure Function**, triggered on a timer, polls the Cosmos DB for new requests. When a "pending" request is found, the function downloads the relevant documents and runs the multi-agent analysis pipeline. The backend uses a multi-agent system powered by `crewai`. The orchestration of agents is handled explicitly in `backend/main.py`, where each agent's task is executed sequentially, and typed outputs are passed manually to the next task. The final result is then used to update the request item in Cosmos DB.
 
 This design ensures that the user interface remains responsive and is not blocked by the potentially long-running analysis process.
 
@@ -28,6 +28,7 @@ This design ensures that the user interface remains responsive and is not blocke
 │   ├── agents/
 │   ├── config/
 │   ├── data/
+│   ├── models.py
 │   ├── prompts/
 │   ├── utils/
 │   ├── .env.example
@@ -38,6 +39,10 @@ This design ensures that the user interface remains responsive and is not blocke
 │
 ├── frontend/
 │   └── streamlit_app.py
+│
+├── tests/
+│   ├── test_main_crew.py
+│   └── ...
 │
 ├── .gitignore
 ├── README.md
